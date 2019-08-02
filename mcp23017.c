@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #include "mcp23017.h"
@@ -34,12 +35,12 @@ static uint8_t readRegister(i2c *i2c, uint8_t regAddr){
 /**
  * Writes a given register
  */
-static void writeRegister(i2c *i2c, uint8_t regAddr, uint8_t regValue){
+static int writeRegister(i2c *i2c, uint8_t regAddr, uint8_t regValue){
 	// Write the register
     uint8_t buf[2] = {0};
     buf[0] = regAddr;
     buf[1] = regValue;
-    libsoc_i2c_write(i2c, buf, 2);
+    return libsoc_i2c_write(i2c, buf, 2);
 }
 
 
@@ -48,7 +49,7 @@ static void writeRegister(i2c *i2c, uint8_t regAddr, uint8_t regValue){
  * - Reads the current register value
  * - Writes the new register value
  */
-static void updateRegisterBit(i2c *i2c, uint8_t pin, uint8_t pValue, uint8_t portAaddr, uint8_t portBaddr) {
+static int updateRegisterBit(i2c *i2c, uint8_t pin, uint8_t pValue, uint8_t portAaddr, uint8_t portBaddr) {
 	uint8_t regValue;
 	uint8_t regAddr = regForPin(pin, portAaddr, portBaddr);
 	uint8_t bit = bitForPin(pin);
@@ -56,7 +57,7 @@ static void updateRegisterBit(i2c *i2c, uint8_t pin, uint8_t pValue, uint8_t por
 	regValue = readRegister(i2c, regAddr);
 	// set the value for the particular bit
 	bitWrite(regValue, bit, pValue);
-	writeRegister(i2c, regAddr, regValue);
+	return writeRegister(i2c, regAddr, regValue);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,23 +66,26 @@ static void updateRegisterBit(i2c *i2c, uint8_t pin, uint8_t pValue, uint8_t por
 i2c* mcp23xx_init(uint8_t i2c_bus, uint8_t i2c_address) {
 	i2c *i2c = libsoc_i2c_init(i2c_bus, i2c_address);
 
-	if (i2c == NULL) {
-		perror("libsoc_i2c_init failed");
-		return i2c;
+	if (i2c == NULL || mcp_begin(i2c) != EXIT_SUCCESS) {
+		perror("mcp_init failed");
+		return NULL;
 	}
-    mcp_begin(i2c);
 	return i2c;
 }
 
-void mcp_begin(i2c *i2c) {
+int mcp_begin(i2c *i2c) {
 	// set defaults!
 	// all inputs on port A and B
-	writeRegister(i2c, MCP23017_IODIRA, 0xFF);
-	writeRegister(i2c, MCP23017_IODIRB, 0xFF);
+	if(writeRegister(i2c, MCP23017_IODIRA, 0xFF) != EXIT_SUCCESS ||
+	   writeRegister(i2c, MCP23017_IODIRB, 0xFF) != EXIT_SUCCESS ){
+	 	perror("mcp_begin failed");  	
+		return EXIT_FAILURE;
+	}
+	return EXIT_SUCCESS;
 }
 
-void mcp_pinMode(i2c *i2c, uint8_t p, uint8_t d) {
-	updateRegisterBit(i2c, p, (d == INPUT), MCP23017_IODIRA, MCP23017_IODIRB);
+int mcp_pinMode(i2c *i2c, uint8_t p, uint8_t d) {
+	return updateRegisterBit(i2c, p, (d == INPUT), MCP23017_IODIRA, MCP23017_IODIRB);
 }
 
 uint8_t mcp_readGPIO(i2c *i2c, uint8_t b) {
@@ -89,12 +93,12 @@ uint8_t mcp_readGPIO(i2c *i2c, uint8_t b) {
     return readRegister(i2c, (b == 0)?MCP23017_GPIOA:MCP23017_GPIOB);
 }
 
-void mcp_writeGPIOAB(i2c *i2c, uint16_t writeValue) {
+int mcp_writeGPIOAB(i2c *i2c, uint16_t writeValue) {
         uint8_t val[2] = {0};
 
         val[0] = writeValue & 0xff;
         val[1] = (writeValue >> 8);
-        libsoc_i2c_write(i2c, val, 2);
+        return libsoc_i2c_write(i2c, val, 2);
 }
 
 uint16_t mcp_readGPIOAB(i2c *i2c) {
@@ -112,7 +116,7 @@ uint16_t mcp_readGPIOAB(i2c *i2c) {
 	return readValue;
 }
 
-void mcp_digitalWrite(i2c *i2c, uint8_t pin, uint8_t d) {
+int mcp_digitalWrite(i2c *i2c, uint8_t pin, uint8_t d) {
 	uint8_t gpio;
 	uint8_t bit = bitForPin(pin);
 
@@ -126,11 +130,11 @@ void mcp_digitalWrite(i2c *i2c, uint8_t pin, uint8_t d) {
 
 	// write the new GPIO
 	regAddr = regForPin(pin, MCP23017_GPIOA, MCP23017_GPIOB);
-	writeRegister(i2c, regAddr, gpio);
+	return writeRegister(i2c, regAddr, gpio);
 }
 
-void mcp_pullUp(i2c *i2c, uint8_t p, uint8_t d) {
-	updateRegisterBit(i2c, p, d, MCP23017_GPPUA, MCP23017_GPPUB);
+int mcp_pullUp(i2c *i2c, uint8_t p, uint8_t d) {
+	return updateRegisterBit(i2c, p, d, MCP23017_GPPUA, MCP23017_GPPUB);
 }
 
 uint8_t mcp_digitalRead(i2c *i2c, uint8_t pin) {
@@ -148,20 +152,27 @@ uint8_t mcp_digitalRead(i2c *i2c, uint8_t pin) {
  * If you are connecting the INTA/B pin to arduino 2/3, you should configure the interupt handling as FALLING with
  * the default configuration.
  */
-void mcp_setupInterrupts(i2c *i2c, uint8_t mirroring, uint8_t openDrain, uint8_t polarity){
+int mcp_setupInterrupts(i2c *i2c, uint8_t mirroring, uint8_t openDrain, uint8_t polarity){
 	// configure the port A
 	uint8_t ioconfValue = readRegister(i2c, MCP23017_IOCONA);
 	bitWrite(ioconfValue, 6, mirroring);
 	bitWrite(ioconfValue, 2, openDrain);
 	bitWrite(ioconfValue, 1, polarity);
-	writeRegister(i2c, MCP23017_IOCONA, ioconfValue);
+	if(writeRegister(i2c, MCP23017_IOCONA, ioconfValue) != EXIT_SUCCESS){
+		perror("mcp_begin failed");  	
+		return EXIT_FAILURE;
+	}
 
 	// Configure the port B
 	ioconfValue = readRegister(i2c, MCP23017_IOCONB);
 	bitWrite(ioconfValue, 6, mirroring);
 	bitWrite(ioconfValue, 2, openDrain);
 	bitWrite(ioconfValue, 1, polarity);
-	writeRegister(i2c, MCP23017_IOCONB, ioconfValue);
+	if(writeRegister(i2c, MCP23017_IOCONB, ioconfValue) != EXIT_SUCCESS){
+		perror("mcp_begin failed");  	
+		return EXIT_FAILURE;
+	}
+	return EXIT_SUCCESS;
 }
 
 /**
