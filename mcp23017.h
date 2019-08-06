@@ -21,6 +21,7 @@
 #ifndef _MCP23017_H_
 #define _MCP23017_H_
 
+#include <stdbool.h>
 #include <libsoc_i2c.h>
 #ifdef __cplusplus
 extern "C"
@@ -71,23 +72,23 @@ extern "C"
 
 #define MCP23017_INT_ERR 255
 
-i2c* mcp23xx_init(uint8_t i2c_bus, uint8_t i2c_address);
+bool mcp23xx_init(uint8_t i2c_bus, uint8_t i2c_address, i2c** i2c);
 int mcp23xx_free(i2c *i2c);
 
-void mcp_begin(i2c *i2c);
+int mcp_begin(i2c *i2c);
 
 /**
  * Sets the pin mode to either INPUT or OUTPUT
  */
-void mcp_pinMode(i2c *i2c, uint8_t p, uint8_t d);
-void mcp_digitalWrite(i2c *i2c, uint8_t p, uint8_t d);
-void mcp_pullUp(i2c *i2c, uint8_t p, uint8_t d);
+int mcp_pinMode(i2c *i2c, uint8_t p, uint8_t d);
+int mcp_digitalWrite(i2c *i2c, uint8_t p, uint8_t d);
+int mcp_pullUp(i2c *i2c, uint8_t p, uint8_t d);
 uint8_t mcp_digitalRead(i2c *i2c, uint8_t p);
 
 /**
  * Reads all 16 pins (port A and B) into a single 16 bits variable.
  */
-void mcp_writeGPIOAB(i2c *i2c, uint16_t port);
+int mcp_writeGPIOAB(i2c *i2c, uint16_t port);
 /**
  * Read a single port, A or B, and return its current 8 bit value.
  * Parameter b should be 0 for GPIOA, and 1 for GPIOB.
@@ -95,7 +96,7 @@ void mcp_writeGPIOAB(i2c *i2c, uint16_t port);
 uint16_t mcp_readGPIOAB(i2c *i2c);
 uint8_t mcp_readGPIO(i2c *i2c, uint8_t b);
 
-void mcp_setupInterrupts(i2c *i2c, uint8_t mirroring, uint8_t open, uint8_t polarity);
+int mcp_setupInterrupts(i2c *i2c, uint8_t mirroring, uint8_t open, uint8_t polarity);
 void mcp_setupInterruptPin(i2c *i2c, uint8_t p, uint8_t mode);
 uint8_t mcp_getLastInterruptPin(i2c *i2c);
 uint8_t mcp_getLastInterruptPinValue(i2c *i2c);
