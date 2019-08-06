@@ -27,8 +27,9 @@ static uint8_t readRegister(i2c *i2c, uint8_t regAddr){
 	uint8_t res;
 
     libsoc_i2c_write(i2c, &regAddr, 1);
-	if (libsoc_i2c_read(i2c, &res, 1))
+	if (libsoc_i2c_read(i2c, &res, 1)){
 		return 0;
+	}
 	return res;
 }
 
@@ -63,25 +64,33 @@ static int updateRegisterBit(i2c *i2c, uint8_t pin, uint8_t pValue, uint8_t port
 ////////////////////////////////////////////////////////////////////////////////
 // PUBLIC routines
 
-i2c* mcp23xx_init(uint8_t i2c_bus, uint8_t i2c_address) {
-	i2c *i2c = libsoc_i2c_init(i2c_bus, i2c_address);
-
-	if (i2c == NULL || mcp_begin(i2c) != EXIT_SUCCESS) {
-		perror("mcp_init failed");
-		return NULL;
+bool mcp23xx_init(uint8_t i2c_bus, uint8_t i2c_address, i2c** i2c) {
+	*i2c = libsoc_i2c_init(i2c_bus, i2c_address);
+	if (*i2c == NULL) {
+		perror("mcp_init failed: nothing is connected");
+		return false;
 	}
-	return i2c;
+	if(mcp_begin(*i2c) != EXIT_SUCCESS){
+		return false;
+	}
+	return true;
 }
 
 int mcp_begin(i2c *i2c) {
+	int ret = 0;
 	// set defaults!
 	// all inputs on port A and B
-	if(writeRegister(i2c, MCP23017_IODIRA, 0xFF) != EXIT_SUCCESS ||
-	   writeRegister(i2c, MCP23017_IODIRB, 0xFF) != EXIT_SUCCESS ){
-	 	perror("mcp_begin failed");  	
-		return EXIT_FAILURE;
+	ret = writeRegister(i2c, MCP23017_IODIRA, 0xFF);
+	if(ret != EXIT_SUCCESS){
+	 	perror("mcp_begin failed: writing to port_A reg.");  	
+		return ret;
 	}
-	return EXIT_SUCCESS;
+	ret = writeRegister(i2c, MCP23017_IODIRB, 0xFF);
+	if(ret != EXIT_SUCCESS){
+	 	perror("mcp_begin failed: writing to port_B reg.");  	
+		return ret;
+	}
+	return ret;
 }
 
 int mcp_pinMode(i2c *i2c, uint8_t p, uint8_t d) {
@@ -107,8 +116,9 @@ uint16_t mcp_readGPIOAB(i2c *i2c) {
     val[0] = MCP23017_GPIOA;
 	// read the current GPIO output latches
     libsoc_i2c_write(i2c, val, 1);
-	if (libsoc_i2c_read(i2c, val, 2))
+	if (libsoc_i2c_read(i2c, val, 2)){
 		return 0;
+	}
    
 	//readValue = wiringPiI2CReadReg16(deviceFd, MCP23017_GPIOA);
 	readValue = (val[1] & 0xFF00) << 8 | ((val[0] & 0x00FF));
@@ -159,7 +169,7 @@ int mcp_setupInterrupts(i2c *i2c, uint8_t mirroring, uint8_t openDrain, uint8_t 
 	bitWrite(ioconfValue, 2, openDrain);
 	bitWrite(ioconfValue, 1, polarity);
 	if(writeRegister(i2c, MCP23017_IOCONA, ioconfValue) != EXIT_SUCCESS){
-		perror("mcp_begin failed");  	
+		perror("mcp_setupInterrupts port A failed");  	
 		return EXIT_FAILURE;
 	}
 
@@ -169,7 +179,7 @@ int mcp_setupInterrupts(i2c *i2c, uint8_t mirroring, uint8_t openDrain, uint8_t 
 	bitWrite(ioconfValue, 2, openDrain);
 	bitWrite(ioconfValue, 1, polarity);
 	if(writeRegister(i2c, MCP23017_IOCONB, ioconfValue) != EXIT_SUCCESS){
-		perror("mcp_begin failed");  	
+		perror("mcp_setupInterrupts port B failed");  	
 		return EXIT_FAILURE;
 	}
 	return EXIT_SUCCESS;

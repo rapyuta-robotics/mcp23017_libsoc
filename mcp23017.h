@@ -21,6 +21,7 @@
 #ifndef _MCP23017_H_
 #define _MCP23017_H_
 
+#include <stdbool.h>
 #include <libsoc_i2c.h>
 #ifdef __cplusplus
 extern "C"
@@ -71,7 +72,7 @@ extern "C"
 
 #define MCP23017_INT_ERR 255
 
-i2c* mcp23xx_init(uint8_t i2c_bus, uint8_t i2c_address);
+bool mcp23xx_init(uint8_t i2c_bus, uint8_t i2c_address, i2c** i2c);
 int mcp23xx_free(i2c *i2c);
 
 int mcp_begin(i2c *i2c);
